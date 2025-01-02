@@ -1,0 +1,42 @@
+-- Crear la base de datos
+CREATE DATABASE SistemaFirma;
+USE SistemaFirma;
+
+-- Tabla Usuario (Clientes, Abogados, y otros roles)
+CREATE TABLE Usuario (
+    id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+    nombre_usuario VARCHAR(255) NOT NULL UNIQUE,
+    contraseña_hash VARCHAR(255) NOT NULL,
+    rol ENUM('cliente', 'abogado', 'administrador') NOT NULL,
+    nombre_completo VARCHAR(255) NOT NULL
+);
+
+-- Tabla Documento (Para los documentos subidos por los clientes)
+CREATE TABLE Documento (
+    id_documento INT AUTO_INCREMENT PRIMARY KEY,
+    id_cliente INT NOT NULL,
+    ruta_archivo VARCHAR(255) NOT NULL,
+    hash VARCHAR(255) NOT NULL,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_cliente) REFERENCES Usuario(id_usuario)
+);
+
+-- Tabla Asignacion (Relación entre clientes y abogados)
+CREATE TABLE Asignacion (
+    id_asignacion INT AUTO_INCREMENT PRIMARY KEY,
+    id_cliente INT NOT NULL,
+    id_abogado INT NOT NULL,
+    fecha_asignacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_cliente) REFERENCES Usuario(id_usuario),
+    FOREIGN KEY (id_abogado) REFERENCES Usuario(id_usuario)
+);
+
+-- Tabla Firma (Para las firmas digitales de los abogados)
+CREATE TABLE Firma (
+    id_firma INT AUTO_INCREMENT PRIMARY KEY,
+    id_documento INT NOT NULL,
+    id_abogado INT NOT NULL,
+    fecha_firma TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_documento) REFERENCES Documento(id_documento),
+    FOREIGN KEY (id_abogado) REFERENCES Usuario(id_usuario)
+);
