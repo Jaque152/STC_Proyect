@@ -4,7 +4,8 @@ import mysql.connector
 import json
 import os
 import hashlib
-from pruebaOnlyShare import encrypt_and_split_secret, decrypt_document_flow, calcular_hash
+from base64 import b64encode
+from pruebaOnlyShare import encrypt_and_split_secret, decrypt_document_flow, calcular_hash, generar_llaves
 
 # Variables globales
 current_user_id = None  # Variable para almacenar el ID del usuario
@@ -191,6 +192,7 @@ def guardar_documento(ruta_archivo, hash_documento, id_cliente):
     finally:
         cursor.close()
         conexion.close()
+
 def cargar_documento():
     """Permite al abogado cargar un documento y guardarlo en la base de datos."""
     # Abrir el cuadro de diálogo para seleccionar el archivo
@@ -226,7 +228,7 @@ def enviar_documentos_disponibles(callback):
     documentos = cargar_documentos_disponibles()
     
     if not documentos:
-        messagebox.showerror("Error", "No tienes documentos disponibles para cifrar.")
+        messagebox.showerror("Error", "No tienes documentos cargados.")
         return
     
     # Crear una ventana para mostrar los documentos disponibles
@@ -274,6 +276,76 @@ def cifrar_doc(document_data):
 def seleccionar_y_cifrar():
     enviar_documentos_disponibles(cifrar_doc)
 
+#Funcion para creacion de pares de llaves
+def guardar_llaves_en_bd_y_archivo(id_usuario):
+    """Verifica el estatus de las llaves, genera nuevas si es necesario, y guarda en la base de datos y archivo."""
+    try:
+        # Conexión a la base de datos
+        conexion = conectar_base_datos()
+        if conexion is None:
+            return
+
+        cursor = conexion.cursor()
+
+        # Verificar si el ID de usuario es válido
+        if not id_usuario:
+            messagebox.showerror("Error", "El ID de usuario no es válido.")
+            return
+        
+        # Verificar si las llaves ya han sido generadas
+        cursor.execute("SELECT estatus_claves FROM Usuario WHERE id_usuario = %s", (id_usuario,))
+        resultado = cursor.fetchone()
+        
+        if resultado is None:
+            messagebox.showerror("Error", f"No se encontró el usuario con ID {id_usuario}.")
+            return
+        
+        if resultado[0] == 'generadas':  # Verificar si las llaves ya están generadas
+            messagebox.showinfo("Información", "Las llaves ya han sido generadas previamente. Solicite nuevas al administrador si las necesita.")
+            return
+        
+        # Generar llaves
+        llave_privada, llave_publica = generar_llaves()
+        
+        # Pedir al usuario que elija dónde guardar la llave privada
+        archivo_privado = filedialog.asksaveasfilename(
+            title="Guardar llave privada",
+            defaultextension=".pem",
+            filetypes=[("Archivos PEM", "*.pem")]
+        )
+        
+        if not archivo_privado:
+            messagebox.showwarning("Cancelado", "No se seleccionó una ubicación para guardar la llave privada.")
+            return
+        
+        # Guardar la llave privada en el archivo seleccionado
+        with open(archivo_privado, "wb") as archivo:
+            archivo.write(llave_privada)
+        
+        # Guardar la llave pública en la base de datos
+        llave_publica_base64 = b64encode(llave_publica).decode('utf-8')
+        cursor.execute(
+            "UPDATE Usuario SET llave_publica = %s, estatus_claves = 'generadas' WHERE id_usuario = %s",
+            (llave_publica_base64, id_usuario)
+        )
+        conexion.commit()
+        
+        messagebox.showinfo("Éxito", f"Llaves generadas y guardadas correctamente en:\n{archivo_privado}")
+    
+    except mysql.connector.Error as db_error:
+        messagebox.showerror("Error de Base de Datos", f"Error al conectar o consultar la base de datos: {db_error}")
+    
+    except Exception as e:
+        messagebox.showerror("Error", f"Error al generar o guardar las llaves: {e}")
+        print(e)
+    finally:
+        if conexion:
+            conexion.close()
+
+
+#Funciones para firma 
+#def seleccionar_y_firmar():
+
 # Pantalla principal para cliente
 def show_client_screen():
     clear_screen()
@@ -289,8 +361,8 @@ def show_lawyer_screen():
     # Botón para cifrar documento
     tk.Button(root, text="Cargar Documento", command=cargar_documento).pack(pady=5)
     tk.Button(root, text="Cifrar Documento", command=seleccionar_y_cifrar).pack(pady=5)
-    tk.Button(root, text="Generar Par de Llaves", command=lambda: None).pack(pady=5)
-    tk.Button(root, text="Firmar Documento", command=lambda: None).pack(pady=5)
+    tk.Button(root, text="Generar Par de Llaves", command=lambda: guardar_llaves_en_bd_y_archivo(current_user_id)).pack(pady=5)
+    tk.Button(root, text="Firmar Documento", command=lambda:None).pack(pady=5)
     # Botón para visualizar documento
     tk.Button(root, text="Visualizar Documento", command=decrypt_document_flow).pack(pady=5)
     tk.Button(root, text="Cerrar Sesión", command=mostrar_login_screen).pack(pady=10)
